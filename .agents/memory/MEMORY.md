@@ -1,0 +1,1 @@
+- [Drips Wave integration](drips-wave-integration.md) — use the public Wave API for discovery; keep application submission explicit and user-controlled.

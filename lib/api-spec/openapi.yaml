@@ -1,0 +1,321 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: wave
+    description: Drips Wave monitoring operations
+  - name: profile
+    description: Contributor profile operations
+  - name: notifications
+    description: Notification settings operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /wave/overview:
+    get:
+      operationId: getWaveOverview
+      tags: [wave]
+      summary: Get the current wave overview
+      responses:
+        "200":
+          description: Wave overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaveOverview"
+  /wave/issues:
+    get:
+      operationId: getWaveIssues
+      tags: [wave]
+      summary: List issues that match the contributor profile
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema: { type: string }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [match, points, newest], default: match }
+        - name: onlyOpen
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Matching issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WaveIssue"
+  /wave/activity:
+    get:
+      operationId: getWaveActivity
+      tags: [wave]
+      summary: Get recent sync and assignment activity
+      responses:
+        "200":
+          description: Activity entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+  /wave/applications:
+    get:
+      operationId: getWaveApplications
+      tags: [wave]
+      summary: List tracked applications
+      responses:
+        "200":
+          description: Tracked applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WaveApplication"
+    post:
+      operationId: createWaveApplication
+      tags: [wave]
+      summary: Track an application submitted by the contributor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WaveApplicationInput"
+      responses:
+        "201":
+          description: Application tracked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaveApplication"
+  /profile:
+    get:
+      operationId: getContributorProfile
+      tags: [profile]
+      summary: Get the contributor matching profile
+      responses:
+        "200":
+          description: Contributor profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContributorProfile"
+    put:
+      operationId: updateContributorProfile
+      tags: [profile]
+      summary: Update the contributor matching profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContributorProfileInput"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContributorProfile"
+  /notifications:
+    get:
+      operationId: getNotificationSettings
+      tags: [notifications]
+      summary: Get notification settings
+      responses:
+        "200":
+          description: Notification settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+  /notifications/test:
+    post:
+      operationId: testNotification
+      tags: [notifications]
+      summary: Send a Telegram test notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationTestInput"
+      responses:
+        "200":
+          description: Notification delivery result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTestResponse"
+        "503":
+          description: Telegram is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTestResponse"
+    put:
+      operationId: updateNotificationSettings
+      tags: [notifications]
+      summary: Update notification settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationSettingsInput"
+      responses:
+        "200":
+          description: Updated notification settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+    WaveOverview:
+      type: object
+      required: [programName, waveLabel, rewardBudget, pendingApplications, applicationLimit, availableSlots, openIssueCount, lastSyncedAt, nextWaveEndsAt]
+      properties:
+        programName: { type: string }
+        waveLabel: { type: string }
+        rewardBudget: { type: string }
+        pendingApplications: { type: integer }
+        applicationLimit: { type: integer }
+        availableSlots: { type: integer }
+        openIssueCount: { type: integer }
+        lastSyncedAt: { type: string, format: date-time }
+        nextWaveEndsAt: { type: string, format: date-time }
+        assignmentCount: { type: integer }
+    WaveIssue:
+      type: object
+      required: [id, title, repository, organization, url, points, complexity, status, applicants, matchScore, matchedSkills, updatedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        repository: { type: string }
+        organization: { type: string }
+        url: { type: string, format: uri }
+        points: { type: integer }
+        complexity: { type: string, enum: [Trivial, Medium, High] }
+        status: { type: string, enum: [open, assigned, resolved, applied] }
+        applicants: { type: integer }
+        matchScore: { type: integer }
+        matchedSkills:
+          type: array
+          items: { type: string }
+        summary: { type: string }
+        updatedAt: { type: string, format: date-time }
+    WaveApplication:
+      type: object
+      required: [id, issueId, issueTitle, repository, status, appliedAt]
+      properties:
+        id: { type: string }
+        issueId: { type: string }
+        issueTitle: { type: string }
+        repository: { type: string }
+        status: { type: string, enum: [pending, assigned, declined, withdrawn, resolved] }
+        appliedAt: { type: string, format: date-time }
+        assignedAt: { type: ["string", "null"], format: date-time }
+    WaveApplicationInput:
+      type: object
+      required: [issueId, issueTitle, repository]
+      properties:
+        issueId: { type: string }
+        issueTitle: { type: string }
+        repository: { type: string }
+        status: { type: string, enum: [pending, assigned, declined, withdrawn, resolved], default: pending }
+    ActivityEntry:
+      type: object
+      required: [id, type, title, description, createdAt]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [sync, assignment, release, application] }
+        title: { type: string }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+    ContributorProfile:
+      type: object
+      required: [name, githubUsername, skills, repositories, minPoints, maxOrganizationApplications]
+      properties:
+        name: { type: string }
+        githubUsername: { type: string }
+        skills:
+          type: array
+          items: { type: string }
+        repositories:
+          type: array
+          items: { type: string }
+        minPoints: { type: integer }
+        maxOrganizationApplications: { type: integer }
+    ContributorProfileInput:
+      type: object
+      required: [name, githubUsername, skills, repositories, minPoints, maxOrganizationApplications]
+      properties:
+        name: { type: string }
+        githubUsername: { type: string }
+        skills:
+          type: array
+          items: { type: string }
+        repositories:
+          type: array
+          items: { type: string }
+        minPoints: { type: integer }
+        maxOrganizationApplications: { type: integer }
+    NotificationSettings:
+      type: object
+      required: [telegramEnabled, assignmentAlertsEnabled, lastNotifiedAt]
+      properties:
+        telegramEnabled: { type: boolean }
+        assignmentAlertsEnabled: { type: boolean }
+        telegramChatId: { type: ["string", "null"] }
+        lastNotifiedAt: { type: ["string", "null"], format: date-time }
+    NotificationSettingsInput:
+      type: object
+      required: [telegramEnabled, assignmentAlertsEnabled]
+      properties:
+        telegramEnabled: { type: boolean }
+        assignmentAlertsEnabled: { type: boolean }
+        telegramChatId: { type: ["string", "null"] }
+    NotificationTestInput:
+      type: object
+      required: [chatId]
+      properties:
+        chatId: { type: string, minLength: 1 }
+    NotificationTestResponse:
+      type: object
+      required: [sent, message]
+      properties:
+        sent: { type: boolean }
+        message: { type: string }
+

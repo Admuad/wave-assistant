@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Wave Assistant"
+description = "A personal assistant for monitoring Drips Wave issues, ranking genuine matches, tracking application slots, and alerting the contributor when an assignment appears."
+version = "1.0.0"
+id = "artifacts/wave-assistant"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23336
+
+[services.development]
+run = "pnpm --filter @workspace/wave-assistant run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/wave-assistant", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/wave-assistant/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23336"
+BASE_PATH = "/"
