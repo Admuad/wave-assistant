@@ -3,7 +3,7 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API specification for DripWave Autonomous Assistant
 servers:
   - url: /api
     description: Base API path
@@ -11,11 +11,11 @@ tags:
   - name: health
     description: Health operations
   - name: wave
-    description: Drips Wave monitoring operations
+    description: Drips Wave monitoring and autonomous operations
   - name: profile
     description: Contributor profile operations
   - name: notifications
-    description: Notification settings operations
+    description: Notification and credential settings operations
 paths:
   /healthz:
     get:
@@ -34,7 +34,7 @@ paths:
     get:
       operationId: getWaveOverview
       tags: [wave]
-      summary: Get the current wave overview
+      summary: Get the current wave overview and autopilot status
       responses:
         "200":
           description: Wave overview
@@ -100,7 +100,7 @@ paths:
     post:
       operationId: createWaveApplication
       tags: [wave]
-      summary: Track an application submitted by the contributor
+      summary: Track or submit an application for an issue
       requestBody:
         required: true
         content:
@@ -109,11 +109,41 @@ paths:
               $ref: "#/components/schemas/WaveApplicationInput"
       responses:
         "201":
-          description: Application tracked
+          description: Application tracked / submitted
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WaveApplication"
+  /wave/autopilot/run:
+    post:
+      operationId: runAutopilotNow
+      tags: [wave]
+      summary: Trigger an immediate Auto-Pilot scan and auto-application cycle
+      responses:
+        "200":
+          description: Autopilot cycle result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotRunResponse"
+  /wave/proposals/generate:
+    post:
+      operationId: generateProposal
+      tags: [wave]
+      summary: Generate a personalized AI proposal pitch for an issue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateProposalInput"
+      responses:
+        "200":
+          description: Generated proposal pitch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProposalGenerated"
   /profile:
     get:
       operationId: getContributorProfile
@@ -147,10 +177,27 @@ paths:
     get:
       operationId: getNotificationSettings
       tags: [notifications]
-      summary: Get notification settings
+      summary: Get notification and credentials settings
       responses:
         "200":
           description: Notification settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+    put:
+      operationId: updateNotificationSettings
+      tags: [notifications]
+      summary: Update notification and credentials settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationSettingsInput"
+      responses:
+        "200":
+          description: Updated notification settings
           content:
             application/json:
               schema:
@@ -179,23 +226,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NotificationTestResponse"
-    put:
-      operationId: updateNotificationSettings
-      tags: [notifications]
-      summary: Update notification settings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NotificationSettingsInput"
-      responses:
-        "200":
-          description: Updated notification settings
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NotificationSettings"
 components:
   schemas:
     HealthStatus:
@@ -205,7 +235,7 @@ components:
       required: [status]
     WaveOverview:
       type: object
-      required: [programName, waveLabel, rewardBudget, pendingApplications, applicationLimit, availableSlots, openIssueCount, lastSyncedAt, nextWaveEndsAt]
+      required: [programName, waveLabel, rewardBudget, pendingApplications, applicationLimit, availableSlots, openIssueCount, lastSyncedAt, nextWaveEndsAt, autopilotEnabled]
       properties:
         programName: { type: string }
         waveLabel: { type: string }
@@ -217,6 +247,9 @@ components:
         lastSyncedAt: { type: string, format: date-time }
         nextWaveEndsAt: { type: string, format: date-time }
         assignmentCount: { type: integer }
+        autopilotEnabled: { type: boolean }
+        lastAutopilotStatus: { type: ["string", "null"] }
+        lastAutopilotRunAt: { type: ["string", "null"], format: date-time }
     WaveIssue:
       type: object
       required: [id, title, repository, organization, url, points, complexity, status, applicants, matchScore, matchedSkills, updatedAt]
@@ -236,6 +269,7 @@ components:
           items: { type: string }
         summary: { type: string }
         updatedAt: { type: string, format: date-time }
+        assignedUsername: { type: ["string", "null"] }
     WaveApplication:
       type: object
       required: [id, issueId, issueTitle, repository, status, appliedAt]
@@ -244,7 +278,8 @@ components:
         issueId: { type: string }
         issueTitle: { type: string }
         repository: { type: string }
-        status: { type: string, enum: [pending, assigned, declined, withdrawn, resolved] }
+        status: { type: string, enum: [pending, assigned, declined, withdrawn, resolved, closed] }
+        proposalText: { type: ["string", "null"] }
         appliedAt: { type: string, format: date-time }
         assignedAt: { type: ["string", "null"], format: date-time }
     WaveApplicationInput:
@@ -254,7 +289,34 @@ components:
         issueId: { type: string }
         issueTitle: { type: string }
         repository: { type: string }
-        status: { type: string, enum: [pending, assigned, declined, withdrawn, resolved], default: pending }
+        status: { type: string, enum: [pending, assigned, declined, withdrawn, resolved, closed], default: pending }
+        proposalText: { type: ["string", "null"] }
+        autoSubmitToDrips: { type: boolean, default: false }
+    AutopilotRunResponse:
+      type: object
+      required: [success, message, scannedCount, appliedCount, activeSlots]
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        scannedCount: { type: integer }
+        appliedCount: { type: integer }
+        activeSlots: { type: integer }
+    GenerateProposalInput:
+      type: object
+      required: [issueId, issueTitle, issueSummary, repository]
+      properties:
+        issueId: { type: string }
+        issueTitle: { type: string }
+        issueSummary: { type: string }
+        repository: { type: string }
+        complexity: { type: string }
+        points: { type: integer }
+    ProposalGenerated:
+      type: object
+      required: [proposal, provider]
+      properties:
+        proposal: { type: string }
+        provider: { type: string }
     ActivityEntry:
       type: object
       required: [id, type, title, description, createdAt]
@@ -278,6 +340,9 @@ components:
           items: { type: string }
         minPoints: { type: integer }
         maxOrganizationApplications: { type: integer }
+        stellarWallet: { type: ["string", "null"] }
+        bio: { type: ["string", "null"] }
+        pitchTemplate: { type: ["string", "null"] }
     ContributorProfileInput:
       type: object
       required: [name, githubUsername, skills, repositories, minPoints, maxOrganizationApplications]
@@ -292,13 +357,25 @@ components:
           items: { type: string }
         minPoints: { type: integer }
         maxOrganizationApplications: { type: integer }
+        stellarWallet: { type: ["string", "null"] }
+        bio: { type: ["string", "null"] }
+        pitchTemplate: { type: ["string", "null"] }
     NotificationSettings:
       type: object
-      required: [telegramEnabled, assignmentAlertsEnabled, lastNotifiedAt]
+      required: [telegramEnabled, assignmentAlertsEnabled, autopilotEnabled, autopilotIntervalMinutes, lastNotifiedAt]
       properties:
         telegramEnabled: { type: boolean }
         assignmentAlertsEnabled: { type: boolean }
         telegramChatId: { type: ["string", "null"] }
+        telegramBotToken: { type: ["string", "null"] }
+        dripsAuthToken: { type: ["string", "null"] }
+        aiApiKey: { type: ["string", "null"] }
+        aiProvider: { type: string, enum: [gemini, openai] }
+        aiModel: { type: string }
+        autopilotEnabled: { type: boolean }
+        autopilotIntervalMinutes: { type: integer }
+        lastAutopilotRunAt: { type: ["string", "null"], format: date-time }
+        lastAutopilotStatus: { type: ["string", "null"] }
         lastNotifiedAt: { type: ["string", "null"], format: date-time }
     NotificationSettingsInput:
       type: object
@@ -307,15 +384,22 @@ components:
         telegramEnabled: { type: boolean }
         assignmentAlertsEnabled: { type: boolean }
         telegramChatId: { type: ["string", "null"] }
+        telegramBotToken: { type: ["string", "null"] }
+        dripsAuthToken: { type: ["string", "null"] }
+        aiApiKey: { type: ["string", "null"] }
+        aiProvider: { type: string, enum: [gemini, openai], default: gemini }
+        aiModel: { type: string, default: gemini-2.5-flash }
+        autopilotEnabled: { type: boolean, default: false }
+        autopilotIntervalMinutes: { type: integer, default: 3 }
     NotificationTestInput:
       type: object
       required: [chatId]
       properties:
         chatId: { type: string, minLength: 1 }
+        botToken: { type: string }
     NotificationTestResponse:
       type: object
       required: [sent, message]
       properties:
         sent: { type: boolean }
         message: { type: string }
-

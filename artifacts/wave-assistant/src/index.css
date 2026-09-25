@@ -286,3 +286,122 @@ button { cursor: pointer; }
   .mobile-nav .nav-link svg { width:15px; height:15px; }
   .review-modal { padding:20px; }
 }
+
+/* Auto-Pilot Banner & Dynamic UI Enhancements */
+.autopilot-banner {
+  background: linear-gradient(135deg, hsl(207 25% 18%), hsl(207 25% 14%));
+  color: hsl(39 40% 98%);
+  border-radius: 14px;
+  padding: 18px 22px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid hsl(207 17% 29%);
+  box-shadow: 0 4px 20px hsl(207 25% 12% / .15);
+}
+.autopilot-banner.active {
+  background: linear-gradient(135deg, hsl(165 40% 22%), hsl(207 25% 15%));
+  border-color: hsl(165 40% 38% / .4);
+}
+.autopilot-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.autopilot-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: hsl(14 72% 59%);
+  box-shadow: 0 0 0 4px hsl(14 72% 59% / .2);
+}
+.autopilot-banner.active .autopilot-pulse {
+  background: hsl(165 45% 50%);
+  box-shadow: 0 0 0 4px hsl(165 45% 50% / .25);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 4px hsl(165 45% 50% / .25); }
+  50% { box-shadow: 0 0 0 9px hsl(165 45% 50% / .05); }
+}
+.autopilot-title {
+  font: 600 15px 'Space Grotesk', sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.autopilot-desc {
+  font-size: 11px;
+  color: hsl(39 40% 98% / .7);
+  margin-top: 3px;
+}
+.autopilot-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pitch-preview-box {
+  margin-top: 14px;
+  border-radius: 9px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 12px 14px;
+}
+.pitch-textarea {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: hsl(36 25% 96%);
+  color: hsl(var(--foreground));
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+.pitch-textarea:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(165 40% 32% / .1);
+}
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-input-wrap input {
+  padding-right: 36px;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  padding: 4px;
+  display: grid;
+  place-items: center;
+}
+.password-toggle-btn:hover {
+  color: hsl(var(--foreground));
+}
+.proposal-badge {
+  font: 500 9px var(--app-font-mono);
+  background: hsl(165 40% 32% / .12);
+  color: hsl(var(--primary));
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.proposal-collapsible {
+  font-size: 11px;
+  background: hsl(36 25% 96%);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  color: hsl(var(--foreground));
+  border-left: 3px solid hsl(var(--primary));
+}

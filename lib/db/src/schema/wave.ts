@@ -31,6 +31,7 @@ export const waveApplicationsTable = pgTable("wave_applications", {
   issueTitle: text("issue_title").notNull(),
   repository: text("repository").notNull(),
   status: text("status").notNull().default("pending"),
+  proposalText: text("proposal_text"),
   appliedAt: timestamp("applied_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -57,6 +58,9 @@ export const contributorProfilesTable = pgTable("contributor_profiles", {
   maxOrganizationApplications: integer("max_organization_applications")
     .notNull()
     .default(4),
+  stellarWallet: text("stellar_wallet"),
+  bio: text("bio"),
+  pitchTemplate: text("pitch_template"),
 });
 
 export const notificationSettingsTable = pgTable("notification_settings", {
@@ -66,6 +70,15 @@ export const notificationSettingsTable = pgTable("notification_settings", {
     .notNull()
     .default("true"),
   telegramChatId: text("telegram_chat_id"),
+  telegramBotToken: text("telegram_bot_token"),
+  dripsAuthToken: text("drips_auth_token"),
+  aiApiKey: text("ai_api_key"),
+  aiProvider: text("ai_provider").notNull().default("gemini"),
+  aiModel: text("ai_model").notNull().default("gemini-2.5-flash"),
+  autopilotEnabled: text("autopilot_enabled").notNull().default("false"),
+  autopilotIntervalMinutes: integer("autopilot_interval_minutes").notNull().default(3),
+  lastAutopilotRunAt: timestamp("last_autopilot_run_at", { withTimezone: true }),
+  lastAutopilotStatus: text("last_autopilot_status"),
   lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
 });
 
