@@ -169,9 +169,9 @@ export interface SubmitApplicationParams {
 export async function submitApplicationToDrips(
   params: SubmitApplicationParams,
 ): Promise<{ success: boolean; message: string; applicationId?: string }> {
-  const token = params.dripsAuthToken || process.env.DRIPS_AUTH_TOKEN;
+  const rawToken = params.dripsAuthToken || process.env.DRIPS_AUTH_TOKEN;
 
-  if (!token) {
+  if (!rawToken) {
     return {
       success: false,
       message:
@@ -179,16 +179,43 @@ export async function submitApplicationToDrips(
     };
   }
 
+  // Extract JWT whether given as raw JWT, Bearer JWT, or full cookie string
+  let jwt = rawToken.trim();
+  let cookieHeader = rawToken.trim();
+
+  if (jwt.includes("wave_access_token=")) {
+    const match = jwt.match(/wave_access_token=([^;]+)/);
+    if (match) {
+      jwt = match[1].trim();
+    }
+  }
+
+  if (jwt.startsWith("Bearer ")) {
+    jwt = jwt.replace(/^Bearer\s+/i, "").trim();
+  }
+
   const endpoint = `https://wave-api.drips.network/api/issues/${params.issueId}/applications`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    Authorization: `Bearer ${jwt}`,
+    "User-Agent": "WaveAssistant/1.0",
+    Origin: "https://www.drips.network",
+    Referer: `https://www.drips.network/wave/stellar/issues/${params.issueId}`,
+  };
+
+  // If rawToken had cookie format, include Cookie header as well
+  if (cookieHeader.includes("=")) {
+    headers["Cookie"] = cookieHeader;
+  } else {
+    headers["Cookie"] = `wave_access_token=${jwt}`;
+  }
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
-        "User-Agent": "WaveAssistant/1.0",
-      },
+      headers,
       body: JSON.stringify({
         pitch: params.pitch,
         stellarWallet: params.stellarWallet || undefined,
