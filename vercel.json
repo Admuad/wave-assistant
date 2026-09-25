@@ -4,11 +4,7 @@
   "outputDirectory": "artifacts/wave-assistant/dist/public",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api|assets|favicon).*)",
       "destination": "/index.html"
     }
   ]
