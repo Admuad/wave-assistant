@@ -371,8 +371,8 @@ router.post("/wave/applications", async (req, res): Promise<void> => {
   res.status(201).json(response);
 });
 
-// POST /wave/autopilot/run
-router.post("/wave/autopilot/run", async (_req, res): Promise<void> => {
+// POST /wave/autopilot/run (and GET support for UptimeRobot / Cron triggers)
+router.all(["/wave/autopilot/run", "/wave/cron"], async (_req, res): Promise<void> => {
   const result = await runAutopilotCycle(true);
   res.json(RunAutopilotNowResponse.parse(result));
 });
