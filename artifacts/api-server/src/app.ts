@@ -31,8 +31,23 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// API routes
+// API routes mounted on /api and root to handle any serverless URL rewriting
 app.use("/api", router);
+app.use(router);
+
+// Global unhandled error handler
+app.use(
+  (
+    err: unknown,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    logger.error({ err }, "Unhandled server error");
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message || "Internal server error" });
+  },
+);
 
 // Serve built React Frontend in unified production mode
 const possibleDistPaths = [
