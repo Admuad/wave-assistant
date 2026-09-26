@@ -741,7 +741,7 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
         <div className="pitch-preview-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span className="proposal-badge">
-              {generate.isPending ? 'Writing proposal…' : 'Clean Plain-Text Proposal'}
+              {generate.isPending ? 'Writing proposal…' : 'Tailored Plain-Text Pitch'}
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button
@@ -777,48 +777,50 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
           />
         </div>
 
-        {settings.data?.dripsAuthToken ? (
-          <label className="confirm-row">
-            <input
-              type="checkbox"
-              checked={autoSubmit}
-              onChange={(e) => setAutoSubmit(e.target.checked)}
-              data-testid="checkbox-auto-submit-api"
-            />
-            <span>Submit directly to DripWave API via saved session token</span>
-          </label>
-        ) : (
-          <div className="field-hint" style={{ marginTop: 12 }}>
-            💡 Tip: You can copy this pitch and click <strong>View Issue on DripWave</strong> to submit directly in your browser.
-          </div>
-        )}
+        <div style={{ background: 'hsl(207 25% 15%)', color: 'hsl(39 40% 92%)', padding: '10px 14px', borderRadius: 8, marginTop: 14, fontSize: 11, border: '1px solid hsl(207 17% 27%)', lineHeight: 1.5 }}>
+          🛡️ <strong>DripWave Cloudflare Verification:</strong> DripWave requires a browser Cloudflare Turnstile check to submit applications. Use <strong>Copy & Open on DripWave</strong> to paste your pitch and submit with 1 click, then track it here for 24/7 Telegram assignment alerts.
+        </div>
 
         {(submitError || create.isError) && (
-          <div className="form-error" data-testid="text-application-error" style={{ background: 'hsl(14 72% 59% / .1)', padding: '8px 12px', borderRadius: 6 }}>
-            {submitError || 'Could not submit application. Ensure your DripWave session token is fresh or apply directly via DripWave.'}
+          <div className="form-error" data-testid="text-application-error" style={{ background: 'hsl(14 72% 59% / .1)', padding: '10px 12px', borderRadius: 6, marginTop: 12 }}>
+            ⚠️ {submitError || 'Direct API submission requires browser Cloudflare verification. Please use "Copy & Open on DripWave" to submit directly.'}
           </div>
         )}
 
-        <div className="modal-actions">
+        <div className="modal-actions" style={{ marginTop: 18 }}>
           <button className="ghost-button" onClick={onClose} data-testid="button-cancel-apply">Cancel</button>
           <a
-            className="ghost-button"
+            className="primary-button"
             href={issue.url}
             target="_blank"
             rel="noreferrer"
-            onClick={handleCopy}
-            title="Copies pitch to clipboard and opens the issue on DripWave"
+            onClick={() => {
+              handleCopy();
+              // Also track locally so the user doesn't have to click twice
+              create.mutate({
+                data: {
+                  issueId: issue.id,
+                  issueTitle: issue.title,
+                  repository: `${issue.organization}/${issue.repository}`,
+                  status: 'pending',
+                  proposalText: proposal,
+                  autoSubmitToDrips: false,
+                },
+              }, {
+                onSuccess: () => {
+                  client.invalidateQueries({ queryKey: getGetWaveApplicationsQueryKey() });
+                  client.invalidateQueries({ queryKey: getGetWaveOverviewQueryKey() });
+                  client.invalidateQueries({ queryKey: getGetWaveIssuesQueryKey() });
+                  client.invalidateQueries({ queryKey: getGetWaveActivityQueryKey() });
+                  onClose();
+                }
+              });
+            }}
+            title="Copies pitch to clipboard, tracks the slot, and opens the issue on DripWave"
+            style={{ background: 'hsl(165 45% 32%)', color: 'hsl(39 40% 98%)' }}
           >
-            <ExternalLink size={13} /> Copy & Open on DripWave
+            <ExternalLink size={13} /> Copy, Track & Apply on DripWave
           </a>
-          <button
-            className="primary-button"
-            disabled={!proposal || create.isPending}
-            onClick={submit}
-            data-testid="button-submit-application"
-          >
-            {create.isPending ? 'Submitting…' : autoSubmit ? 'Submit to DripWave' : 'Track Application'}
-          </button>
         </div>
       </div>
     </div>
