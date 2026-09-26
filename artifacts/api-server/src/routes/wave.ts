@@ -190,7 +190,17 @@ export async function syncDripWaveProfile(
   const token = explicitToken || settings?.dripsAuthToken;
   if (!token) return;
 
-  const { profile, applications } = await fetchUserDripWaveData(token);
+  const onTokenRefreshed = async (newCookie: string) => {
+    await db
+      .update(notificationSettingsTable)
+      .set({ dripsAuthToken: newCookie })
+      .where(eq(notificationSettingsTable.id, DEFAULT_SETTINGS_ID));
+  };
+
+  const { profile, applications } = await fetchUserDripWaveData(
+    token,
+    onTokenRefreshed,
+  );
   if (!profile) return;
 
   const [currentProfile] = await db
@@ -480,6 +490,12 @@ router.post("/wave/applications", async (req, res): Promise<void> => {
       dripsAuthToken: settings.dripsAuthToken,
       stellarWallet: profile?.stellarWallet,
       githubUsername: profile?.githubUsername,
+      onTokenRefreshed: async (newCookie) => {
+        await db
+          .update(notificationSettingsTable)
+          .set({ dripsAuthToken: newCookie })
+          .where(eq(notificationSettingsTable.id, DEFAULT_SETTINGS_ID));
+      },
     });
 
     if (!submitResult.success) {

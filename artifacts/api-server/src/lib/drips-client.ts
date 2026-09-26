@@ -158,12 +158,206 @@ export function calculateMatchScore(
   };
 }
 
+export interface DripWaveUserPayload {
+  sub?: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  githubUsername?: string;
+  signUpDate?: string;
+  exp?: number;
+}
+
+export interface ParsedDripWaveSession {
+  jwt: string;
+  refreshToken: string | null;
+  cookieHeader: string;
+  user: DripWaveUserPayload | null;
+  expiresAt: number | null;
+  isExpired: boolean;
+  canAutoRefresh: boolean;
+}
+
+export function parseDripWaveToken(rawToken: string): ParsedDripWaveSession {
+  const trimmed = rawToken.trim();
+  let jwt = trimmed;
+  let refreshToken: string | null = null;
+
+  // Extract wave_access_token if present in cookie format
+  if (trimmed.includes("wave_access_token=")) {
+    const match = trimmed.match(/wave_access_token=([^;]+)/);
+    if (match) {
+      jwt = match[1].trim();
+    }
+  }
+
+  // Extract wave_refresh_token if present
+  if (trimmed.includes("wave_refresh_token=")) {
+    const match = trimmed.match(/wave_refresh_token=([^;]+)/);
+    if (match) {
+      refreshToken = match[1].trim();
+    }
+  }
+
+  if (jwt.startsWith("Bearer ")) {
+    jwt = jwt.replace(/^Bearer\s+/i, "").trim();
+  }
+
+  let user: DripWaveUserPayload | null = null;
+  let expiresAt: number | null = null;
+  let isExpired = false;
+
+  try {
+    const parts = jwt.split(".");
+    if (parts.length >= 2) {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
+      const parsed = JSON.parse(jsonStr);
+      expiresAt = typeof parsed.exp === "number" ? parsed.exp * 1000 : null;
+      isExpired = Boolean(expiresAt && Date.now() >= expiresAt - 60000); // 1-minute buffer
+
+      user = {
+        sub: parsed.sub,
+        name: parsed.name,
+        email: parsed.email,
+        picture: parsed.picture,
+        githubUsername:
+          parsed.name ||
+          (parsed.picture?.includes("/u/") ? parsed.name : undefined),
+        signUpDate: parsed.signUpDate,
+        exp: parsed.exp,
+      };
+    }
+  } catch (err) {
+    console.warn("Could not parse JWT payload from token:", err);
+  }
+
+  let cookieHeader = trimmed;
+  if (!cookieHeader.includes("=")) {
+    cookieHeader = `wave_access_token=${jwt}${
+      refreshToken ? `; wave_refresh_token=${refreshToken}` : ""
+    }`;
+  }
+
+  return {
+    jwt,
+    refreshToken,
+    cookieHeader,
+    user,
+    expiresAt,
+    isExpired,
+    canAutoRefresh: Boolean(refreshToken),
+  };
+}
+
+/**
+ * Automatically refresh a short-lived DripWave access token using the long-lived refresh token.
+ */
+export async function refreshDripWaveToken(
+  refreshToken: string,
+): Promise<{ success: boolean; newJwt?: string; newCookie?: string; error?: string }> {
+  try {
+    const res = await fetch(
+      "https://wave-api.drips.network/api/auth/token/refresh",
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Cookie: `wave_refresh_token=${refreshToken}`,
+          Origin: "https://www.drips.network",
+          Referer: "https://www.drips.network/wave/stellar",
+          "User-Agent": "WaveAssistant/1.0",
+        },
+      },
+    );
+
+    const setCookies = res.headers.get("set-cookie") || "";
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+    if (res.ok) {
+      let newJwt = "";
+      if (setCookies.includes("wave_access_token=")) {
+        const match = setCookies.match(/wave_access_token=([^;]+)/);
+        if (match) newJwt = match[1].trim();
+      }
+      if (!newJwt && typeof body.accessToken === "string") {
+        newJwt = body.accessToken;
+      }
+      if (!newJwt && typeof body.token === "string") {
+        newJwt = body.token;
+      }
+
+      const newCookie = `wave_access_token=${newJwt || ""}; wave_refresh_token=${refreshToken}`;
+      return {
+        success: true,
+        newJwt: newJwt || undefined,
+        newCookie,
+      };
+    }
+
+    return {
+      success: false,
+      error:
+        (body.error as string) ||
+        (body.message as string) ||
+        `Refresh failed with HTTP ${res.status}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Returns active, authenticated headers for DripWave API requests, auto-refreshing if expired.
+ */
+export async function getValidDripWaveHeaders(
+  rawToken: string,
+  onTokenRefreshed?: (newCookie: string) => Promise<void> | void,
+): Promise<{
+  headers: Record<string, string>;
+  user: DripWaveUserPayload | null;
+  isValid: boolean;
+  error?: string;
+}> {
+  let session = parseDripWaveToken(rawToken);
+
+  if (session.isExpired && session.refreshToken) {
+    console.log("DripWave token is expired. Auto-refreshing via refresh token...");
+    const refreshResult = await refreshDripWaveToken(session.refreshToken);
+    if (refreshResult.success && refreshResult.newCookie) {
+      session = parseDripWaveToken(refreshResult.newCookie);
+      if (onTokenRefreshed) {
+        await onTokenRefreshed(refreshResult.newCookie);
+      }
+    }
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    Authorization: `Bearer ${session.jwt}`,
+    Cookie: session.cookieHeader,
+    "User-Agent": "WaveAssistant/1.0",
+    Origin: "https://www.drips.network",
+    Referer: "https://www.drips.network/wave/stellar",
+  };
+
+  return {
+    headers,
+    user: session.user,
+    isValid: !session.isExpired,
+  };
+}
+
 export interface SubmitApplicationParams {
   issueId: string;
   pitch: string;
   dripsAuthToken?: string | null;
   stellarWallet?: string | null;
   githubUsername?: string | null;
+  onTokenRefreshed?: (newCookie: string) => Promise<void> | void;
 }
 
 export async function submitApplicationToDrips(
@@ -175,42 +369,16 @@ export async function submitApplicationToDrips(
     return {
       success: false,
       message:
-        "No Drips auth token provided. Add your token in Settings to enable automated API submissions.",
+        "No Drips auth token provided. Add your token or cookie in Settings to enable automated submissions.",
     };
   }
 
-  // Extract JWT whether given as raw JWT, Bearer JWT, or full cookie string
-  let jwt = rawToken.trim();
-  let cookieHeader = rawToken.trim();
-
-  if (jwt.includes("wave_access_token=")) {
-    const match = jwt.match(/wave_access_token=([^;]+)/);
-    if (match) {
-      jwt = match[1].trim();
-    }
-  }
-
-  if (jwt.startsWith("Bearer ")) {
-    jwt = jwt.replace(/^Bearer\s+/i, "").trim();
-  }
+  const { headers, isValid } = await getValidDripWaveHeaders(
+    rawToken,
+    params.onTokenRefreshed,
+  );
 
   const endpoint = `https://wave-api.drips.network/api/issues/${params.issueId}/applications`;
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    Authorization: `Bearer ${jwt}`,
-    "User-Agent": "WaveAssistant/1.0",
-    Origin: "https://www.drips.network",
-    Referer: `https://www.drips.network/wave/stellar/issues/${params.issueId}`,
-  };
-
-  // If rawToken had cookie format, include Cookie header as well
-  if (cookieHeader.includes("=")) {
-    headers["Cookie"] = cookieHeader;
-  } else {
-    headers["Cookie"] = `wave_access_token=${jwt}`;
-  }
 
   try {
     const response = await fetch(endpoint, {
@@ -234,11 +402,14 @@ export async function submitApplicationToDrips(
       };
     }
 
+    const errorMsg =
+      (body as { message?: string; error?: string })?.error ||
+      (body as { message?: string })?.message ||
+      `DripWave rejected application with HTTP ${response.status}`;
+
     return {
       success: false,
-      message:
-        (body as { message?: string })?.message ||
-        `DripWave rejected application with HTTP ${response.status}`,
+      message: errorMsg,
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -247,59 +418,6 @@ export async function submitApplicationToDrips(
       message: `Network error submitting application: ${errorMsg}`,
     };
   }
-}
-
-export interface DripWaveUserPayload {
-  sub?: string;
-  name?: string;
-  email?: string;
-  picture?: string;
-  githubUsername?: string;
-  signUpDate?: string;
-}
-
-export function parseDripWaveToken(rawToken: string): {
-  jwt: string;
-  cookieHeader: string;
-  user: DripWaveUserPayload | null;
-} {
-  let jwt = rawToken.trim();
-  let cookieHeader = rawToken.trim();
-
-  if (jwt.includes("wave_access_token=")) {
-    const match = jwt.match(/wave_access_token=([^;]+)/);
-    if (match) {
-      jwt = match[1].trim();
-    }
-  }
-
-  if (jwt.startsWith("Bearer ")) {
-    jwt = jwt.replace(/^Bearer\s+/i, "").trim();
-  }
-
-  let user: DripWaveUserPayload | null = null;
-  try {
-    const parts = jwt.split(".");
-    if (parts.length >= 2) {
-      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
-      const parsed = JSON.parse(jsonStr);
-      user = {
-        sub: parsed.sub,
-        name: parsed.name,
-        email: parsed.email,
-        picture: parsed.picture,
-        githubUsername:
-          parsed.name ||
-          (parsed.picture?.includes("/u/") ? parsed.name : undefined),
-        signUpDate: parsed.signUpDate,
-      };
-    }
-  } catch (err) {
-    console.warn("Could not parse JWT payload from token:", err);
-  }
-
-  return { jwt, cookieHeader, user };
 }
 
 export interface DripWaveUserApplication {
@@ -313,23 +431,17 @@ export interface DripWaveUserApplication {
   assignedAt?: string | null;
 }
 
-export async function fetchUserDripWaveData(rawToken: string): Promise<{
+export async function fetchUserDripWaveData(
+  rawToken: string,
+  onTokenRefreshed?: (newCookie: string) => Promise<void> | void,
+): Promise<{
   profile: DripWaveUserPayload | null;
   applications: DripWaveUserApplication[];
 }> {
-  const { jwt, cookieHeader, user } = parseDripWaveToken(rawToken);
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    Authorization: `Bearer ${jwt}`,
-    "User-Agent": "WaveAssistant/1.0",
-    Origin: "https://www.drips.network",
-    Referer: "https://www.drips.network/wave/stellar",
-  };
-  if (cookieHeader.includes("=")) {
-    headers["Cookie"] = cookieHeader;
-  } else {
-    headers["Cookie"] = `wave_access_token=${jwt}`;
-  }
+  const { headers, user } = await getValidDripWaveHeaders(
+    rawToken,
+    onTokenRefreshed,
+  );
 
   const applications: DripWaveUserApplication[] = [];
   const username = user?.githubUsername || user?.name || "";

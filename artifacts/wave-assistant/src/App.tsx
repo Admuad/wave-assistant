@@ -1272,17 +1272,36 @@ function NotificationsPage() {
 
           {/* DripWave Credentials */}
           <div className="setup-box" style={{ marginTop: 22 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Key size={14} color="hsl(var(--primary))" />
-              <h4 style={{ margin: 0 }}>DripWave Session / Auth Token</h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Key size={14} color="hsl(var(--primary))" />
+                <h4 style={{ margin: 0 }}>DripWave Session Credentials & 24/7 Auto-Refresh</h4>
+              </div>
+              {form.dripsAuthToken?.includes('wave_refresh_token') ? (
+                <span className="status-chip" style={{ background: 'hsl(165 40% 32% / .15)', color: 'hsl(165 45% 60%)' }}>
+                  <span /> 24/7 Auto-Renewing Daemon Active
+                </span>
+              ) : form.dripsAuthToken ? (
+                <span className="status-chip pending">
+                  <span /> 15-Min Token (Add Cookie for 24/7)
+                </span>
+              ) : null}
             </div>
-            <p>Required for the assistant to submit applications on your behalf directly to DripWave API. (Grab your Bearer token or session cookie from browser devtools on drips.network).</p>
+            <p>
+              To run the assistant as a <strong>24/7 autonomous daemon</strong> that applies and manages slots without expiring, paste your full <code>Cookie</code> string containing <code>wave_refresh_token</code>. The background engine will automatically refresh access tokens every 15 minutes.
+            </p>
+            <div style={{ background: 'hsl(207 25% 15%)', color: 'hsl(39 40% 90%)', padding: '9px 12px', borderRadius: 7, fontSize: 11, margin: '10px 0', border: '1px solid hsl(207 17% 27%)' }}>
+              <strong>How to grab your 24/7 Cookie in 15 seconds:</strong><br />
+              1. Open <strong>drips.network</strong> in your browser & press <code>F12</code> (DevTools).<br />
+              2. Go to <strong>Network</strong> tab → click any network request to <code>wave-api.drips.network</code>.<br />
+              3. Under <strong>Request Headers</strong>, copy the full <strong>Cookie</strong> header value (e.g. <code>wave_refresh_token=...; wave_access_token=...</code>) and paste below.
+            </div>
             <div className="password-input-wrap">
               <input
                 type={showDripsToken ? 'text' : 'password'}
                 value={form.dripsAuthToken || ''}
                 onChange={(event) => setForm({ ...form, dripsAuthToken: event.target.value })}
-                placeholder="Bearer eyJ... or token string"
+                placeholder="Paste full cookie string: wave_refresh_token=...; wave_access_token=..."
                 data-testid="input-drips-auth-token"
               />
               <button

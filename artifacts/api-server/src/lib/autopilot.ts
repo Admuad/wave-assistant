@@ -142,13 +142,27 @@ export async function runAutopilotCycle(force = false): Promise<AutopilotCycleRe
 
           // Submit to DripWave API if auth token is available
           if (settings?.dripsAuthToken) {
-            await submitApplicationToDrips({
+            const submitRes = await submitApplicationToDrips({
               issueId: item.issue.id,
               pitch: proposalResult.proposal,
               dripsAuthToken: settings.dripsAuthToken,
               stellarWallet: profile.stellarWallet,
               githubUsername: profile.githubUsername,
+              onTokenRefreshed: async (newCookie) => {
+                await db
+                  .update(notificationSettingsTable)
+                  .set({ dripsAuthToken: newCookie })
+                  .where(eq(notificationSettingsTable.id, DEFAULT_SETTINGS_ID));
+              },
             });
+
+            if (!submitRes.success) {
+              console.warn(
+                `Autopilot skipped recording issue ${item.issue.id} because DripWave rejected:`,
+                submitRes.message,
+              );
+              continue;
+            }
           }
 
           const appId = randomUUID();
