@@ -51,7 +51,8 @@ export async function generateAiProposal(
         };
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text && text.trim()) {
-          return { proposal: text.trim(), provider: `Gemini (${model})` };
+          const cleanText = cleanPlainTextProposal(text.trim());
+          return { proposal: cleanText, provider: `Gemini (${model})` };
         }
       }
     } catch {
@@ -75,22 +76,23 @@ export async function generateAiProposal(
             {
               role: "system",
               content:
-                "You are an expert open-source contributor applying for a bounty issue on DripWave / Stellar Wave. Write a concise, professional, and convincing technical proposal (under 200 words). Include approach, testing strategy, and estimated ETA.",
+                "You are an expert open-source contributor applying for a bounty issue on DripWave / Stellar Wave. Write a concise, professional, plain-text technical proposal (under 120 words). DO NOT use markdown formatting like bold stars (**) or markdown headers. Keep it clean plain text with simple paragraphs.",
             },
             { role: "user", content: prompt },
           ],
           temperature: 0.6,
-          max_tokens: 500,
+          max_tokens: 400,
         }),
       });
 
       if (res.ok) {
-        const data = await res.json() as {
+        const data = (await res.json()) as {
           choices?: Array<{ message?: { content?: string } }>;
         };
         const text = data.choices?.[0]?.message?.content;
         if (text && text.trim()) {
-          return { proposal: text.trim(), provider: `OpenAI (${model})` };
+          const cleanText = cleanPlainTextProposal(text.trim());
+          return { proposal: cleanText, provider: `OpenAI (${model})` };
         }
       }
     } catch {
@@ -105,6 +107,15 @@ export async function generateAiProposal(
   };
 }
 
+function cleanPlainTextProposal(text: string): string {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/^#+\s+/gm, "")
+    .replace(/`/g, "")
+    .trim();
+}
+
 function buildProposalPrompt(context: ProposalContext): string {
   const skillsList = context.skills?.length
     ? context.skills.join(", ")
@@ -115,7 +126,7 @@ function buildProposalPrompt(context: ProposalContext): string {
     : "";
 
   return `
-Write an application pitch to be assigned this DripWave bounty issue:
+Write a clean plain-text application pitch to be assigned this DripWave bounty issue:
 
 Issue Title: ${context.issueTitle}
 Repository: ${context.repository}
@@ -128,30 +139,29 @@ Relevant Skills: ${skillsList}
 ${bio}
 ${custom}
 
-Format requirements:
-1. Brief technical diagnosis and approach to solving the issue.
-2. Verification/testing strategy (unit tests, integration, edge cases).
-3. Realistic turnaround timeframe (e.g. 24-48 hours).
-Keep it focused, confident, and clean (no generic fluff or buzzwords).
+Formatting rules:
+- Plain text only (NO markdown stars **, NO markdown hashtags #, NO bolding).
+- 2-3 concise paragraphs:
+  1. Technical approach to solving the issue.
+  2. Testing and verification plan.
+  3. Delivery timeline (24-48 hours).
+- Keep it simple, clear, and direct.
 `.trim();
 }
 
 function buildTailoredProposal(context: ProposalContext): string {
   const relevantSkills = context.skills?.length
     ? context.skills.slice(0, 3).join(", ")
-    : "core architecture and testing";
+    : "TypeScript and smart contract testing";
 
-  return `Hello! I would love to tackle this issue for ${context.repository}.
+  return `Hi! I would like to work on this issue for ${context.repository}.
 
-**Technical Approach:**
-- I've reviewed the issue requirements for "${context.issueTitle}".
-- I will inspect the relevant module, implement the requested changes cleanly adhering to the existing codebase patterns and style conventions, and ensure zero regressions.
+Technical Approach:
+I have reviewed the requirements for "${context.issueTitle}". I will locate the relevant module, implement the changes cleanly adhering to the project's architecture and coding standards, and ensure zero regressions.
 
-**Testing & Verification:**
-- Add comprehensive unit and integration tests covering positive flows and edge cases.
-- Run the full project test suite and linters to verify CI cleanliness.
+Testing & Verification:
+I will add comprehensive unit and integration test coverage for the changes and verify that the full CI test suite passes cleanly.
 
-**Relevant Experience & Delivery:**
-- Strong background working with ${relevantSkills}.
-- Ready to start immediately upon assignment and deliver a clean, well-documented PR within 24-48 hours.`.trim();
+Experience & Turnaround:
+I have hands-on experience in ${relevantSkills}. I can begin immediately upon assignment and deliver a clean PR within 24 to 48 hours.`.trim();
 }

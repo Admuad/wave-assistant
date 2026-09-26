@@ -91,6 +91,43 @@ function toIssueView(
   };
 }
 
+export const DEFAULT_SKILLS = [
+  "TypeScript",
+  "JavaScript",
+  "Rust",
+  "Python",
+  "Node.js",
+  "React",
+  "Stellar",
+  "Soroban",
+  "Smart Contracts",
+  "Web3",
+  "Decentralized Identity",
+  "Gemini API",
+  "Autonomous Agents",
+  "AI Engineering",
+  "PostgreSQL",
+  "Drizzle ORM",
+  "Docker",
+  "Telegram Bots",
+  "Remotion",
+  "Vite",
+  "Next.js",
+  "REST APIs",
+  "Git",
+  "Testing",
+];
+
+export const DEFAULT_REPOSITORIES = [
+  "stellar/soroban-sdk",
+  "stellar/stellar-sdk",
+  "stellar/rs-soroban-env",
+  "drip-network/wave",
+];
+
+export const DEFAULT_BIO =
+  "Full-stack and Web3 engineer specializing in TypeScript, Rust, Stellar Soroban smart contracts, autonomous agents, and scalable APIs.";
+
 async function ensureSeedData(): Promise<void> {
   const [profile] = await db
     .select()
@@ -100,16 +137,27 @@ async function ensureSeedData(): Promise<void> {
   if (!profile) {
     await db.insert(contributorProfilesTable).values({
       id: DEFAULT_PROFILE_ID,
-      name: "Contributor",
-      githubUsername: "",
-      skills: ["TypeScript", "JavaScript", "Rust", "React", "Node.js", "testing"],
-      repositories: [],
+      name: "Admuad",
+      githubUsername: "Admuad",
+      skills: DEFAULT_SKILLS,
+      repositories: DEFAULT_REPOSITORIES,
       minPoints: 100,
       maxOrganizationApplications: 4,
       stellarWallet: "",
-      bio: "Full-stack and smart contract developer specializing in TypeScript, Rust, and Stellar Soroban applications.",
+      bio: DEFAULT_BIO,
       pitchTemplate: "",
     });
+  } else if (!profile.skills || profile.skills.length <= 6 || profile.name === "Contributor") {
+    await db
+      .update(contributorProfilesTable)
+      .set({
+        skills: DEFAULT_SKILLS,
+        repositories: profile.repositories?.length ? profile.repositories : DEFAULT_REPOSITORIES,
+        bio: profile.bio || DEFAULT_BIO,
+        name: profile.name === "Contributor" ? "Admuad" : profile.name,
+        githubUsername: profile.githubUsername === "Contributor" || !profile.githubUsername ? "Admuad" : profile.githubUsername,
+      })
+      .where(eq(contributorProfilesTable.id, DEFAULT_PROFILE_ID));
   }
 
   const [settings] = await db
@@ -426,13 +474,20 @@ router.post("/wave/applications", async (req, res): Promise<void> => {
 
   // Submit to DripWave if requested or if token is present
   if (parsed.data.autoSubmitToDrips && settings?.dripsAuthToken) {
-    await submitApplicationToDrips({
+    const submitResult = await submitApplicationToDrips({
       issueId: parsed.data.issueId,
       pitch: finalProposal,
       dripsAuthToken: settings.dripsAuthToken,
       stellarWallet: profile?.stellarWallet,
       githubUsername: profile?.githubUsername,
     });
+
+    if (!submitResult.success) {
+      res.status(400).json({
+        error: `DripWave API Submission Failed: ${submitResult.message}`,
+      });
+      return;
+    }
   }
 
   const [application] = await db
@@ -519,6 +574,27 @@ router.get("/profile", async (_req, res): Promise<void> => {
     .select()
     .from(contributorProfilesTable)
     .where(eq(contributorProfilesTable.id, DEFAULT_PROFILE_ID));
+
+  res.json(GetContributorProfileResponse.parse(profile));
+});
+
+// POST /profile/reset-defaults
+router.post("/profile/reset-defaults", async (_req, res): Promise<void> => {
+  await ensureSeedData();
+  const [profile] = await db
+    .update(contributorProfilesTable)
+    .set({
+      name: "Admuad",
+      githubUsername: "Admuad",
+      skills: DEFAULT_SKILLS,
+      repositories: DEFAULT_REPOSITORIES,
+      minPoints: 100,
+      maxOrganizationApplications: 4,
+      bio: DEFAULT_BIO,
+      pitchTemplate: "",
+    })
+    .where(eq(contributorProfilesTable.id, DEFAULT_PROFILE_ID))
+    .returning();
 
   res.json(GetContributorProfileResponse.parse(profile));
 });

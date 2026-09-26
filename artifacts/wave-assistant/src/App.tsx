@@ -89,7 +89,8 @@ function Shell({ children }: { children: ReactNode }) {
   const health = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey(), retry: false } });
   const profile = useGetContributorProfile({ query: { queryKey: getGetContributorProfileQueryKey(), retry: false } });
   const overview = useGetWaveOverview({ query: { queryKey: getGetWaveOverviewQueryKey(), retry: false } });
-  const initials = profile.data?.name?.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase() || 'WA';
+  const initials = profile.data?.name?.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase() || 'AD';
+  const username = profile.data?.githubUsername || 'Admuad';
 
   return (
     <div className="app-shell noise">
@@ -124,7 +125,22 @@ function Shell({ children }: { children: ReactNode }) {
               <span className={`health-dot ${health.isError ? 'error' : ''}`} />
               {health.isLoading ? 'Checking connection' : health.isError ? 'Connection issue' : 'System online'}
             </div>
-            <Link href="/profile" className="avatar" data-testid="link-avatar">{initials}</Link>
+            <Link href="/profile" className="user-badge" data-testid="link-avatar" title={`Contributor: @${username}`}>
+              <div className="avatar">
+                {username ? (
+                  <img
+                    src={`https://github.com/${username}.png`}
+                    alt={username}
+                    className="avatar-img"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                <span>{initials}</span>
+              </div>
+              <span className="user-handle">@{username}</span>
+            </Link>
           </div>
         </header>
         <main>{children}</main>
@@ -618,7 +634,8 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
 
   const [proposal, setProposal] = useState('');
   const [autoSubmit, setAutoSubmit] = useState(Boolean(settings.data?.dripsAuthToken));
-  const [hasGenerated, setHasGenerated] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     // Automatically generate AI proposal on modal open
@@ -636,11 +653,17 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
       {
         onSuccess: (res) => {
           setProposal(res.proposal);
-          setHasGenerated(true);
         },
       },
     );
   }, [issue.id]);
+
+  const handleCopy = () => {
+    if (!proposal) return;
+    navigator.clipboard.writeText(proposal);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
 
   const handleRegenerate = () => {
     generate.mutate(
@@ -657,13 +680,13 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
       {
         onSuccess: (res) => {
           setProposal(res.proposal);
-          setHasGenerated(true);
         },
       },
     );
   };
 
   const submit = () => {
+    setSubmitError(null);
     create.mutate(
       {
         data: {
@@ -683,17 +706,21 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
           client.invalidateQueries({ queryKey: getGetWaveActivityQueryKey() });
           onClose();
         },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          setSubmitError(msg);
+        },
       },
     );
   };
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <div className="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title" style={{ maxWidth: 600 }}>
+      <div className="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title" style={{ maxWidth: 620 }}>
         <div className="modal-kicker eyebrow">AI Application Generator</div>
         <h2 id="review-title">Apply to {issue.repository}</h2>
         <p className="modal-copy">
-          Review or customize the AI-generated proposal pitch tailored to this bounty issue.
+          Review or customize the plain-text proposal pitch tailored to this bounty issue.
         </p>
 
         <div className="review-card">
@@ -707,25 +734,39 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
           <strong>{issue.title}</strong>
           <p>{issue.summary}</p>
           <a className="ghost-button" href={issue.url} target="_blank" rel="noreferrer" data-testid="link-open-drips">
-            <ExternalLink size={13} /> View Full Issue on Drips
+            <ExternalLink size={13} /> View Issue on DripWave.network
           </a>
         </div>
 
         <div className="pitch-preview-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span className="proposal-badge">
-              {generate.isPending ? 'Generating proposal…' : 'Personalized Pitch'}
+              {generate.isPending ? 'Writing proposal…' : 'Clean Plain-Text Proposal'}
             </span>
-            <button
-              type="button"
-              className="ghost-button"
-              style={{ height: 26, minHeight: 26, padding: '0 8px', fontSize: 10 }}
-              onClick={handleRegenerate}
-              disabled={generate.isPending}
-              data-testid="button-regenerate-pitch"
-            >
-              <Sparkles size={11} /> {generate.isPending ? 'Writing…' : 'Regenerate'}
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ height: 26, minHeight: 26, padding: '0 8px', fontSize: 10 }}
+                onClick={handleCopy}
+                disabled={!proposal}
+                data-testid="button-copy-pitch"
+              >
+                {copied ? <Check size={11} color="hsl(165 45% 45%)" /> : <Sparkles size={11} />}
+                {copied ? 'Copied to Clipboard!' : 'Copy Pitch'}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                style={{ height: 26, minHeight: 26, padding: '0 8px', fontSize: 10 }}
+                onClick={handleRegenerate}
+                disabled={generate.isPending}
+                data-testid="button-regenerate-pitch"
+              >
+                <RefreshCw className={generate.isPending ? 'animate-spin' : ''} size={11} />
+                {generate.isPending ? 'Writing…' : 'Regenerate'}
+              </button>
+            </div>
           </div>
           <textarea
             className="pitch-textarea"
@@ -736,7 +777,7 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
           />
         </div>
 
-        {settings.data?.dripsAuthToken && (
+        {settings.data?.dripsAuthToken ? (
           <label className="confirm-row">
             <input
               type="checkbox"
@@ -744,25 +785,39 @@ function ApplyPitchModal({ issue, onClose }: { issue: WaveIssue; onClose: () => 
               onChange={(e) => setAutoSubmit(e.target.checked)}
               data-testid="checkbox-auto-submit-api"
             />
-            <span>Submit directly to DripWave API using saved Drips credentials</span>
+            <span>Submit directly to DripWave API via saved session token</span>
           </label>
+        ) : (
+          <div className="field-hint" style={{ marginTop: 12 }}>
+            💡 Tip: You can copy this pitch and click <strong>View Issue on DripWave</strong> to submit directly in your browser.
+          </div>
         )}
 
-        {create.isError && (
-          <div className="form-error" data-testid="text-application-error">
-            Could not submit application. Check credentials in Settings and try again.
+        {(submitError || create.isError) && (
+          <div className="form-error" data-testid="text-application-error" style={{ background: 'hsl(14 72% 59% / .1)', padding: '8px 12px', borderRadius: 6 }}>
+            {submitError || 'Could not submit application. Ensure your DripWave session token is fresh or apply directly via DripWave.'}
           </div>
         )}
 
         <div className="modal-actions">
           <button className="ghost-button" onClick={onClose} data-testid="button-cancel-apply">Cancel</button>
+          <a
+            className="ghost-button"
+            href={issue.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={handleCopy}
+            title="Copies pitch to clipboard and opens the issue on DripWave"
+          >
+            <ExternalLink size={13} /> Copy & Open on DripWave
+          </a>
           <button
             className="primary-button"
             disabled={!proposal || create.isPending}
             onClick={submit}
             data-testid="button-submit-application"
           >
-            {create.isPending ? 'Submitting…' : autoSubmit ? 'Submit Application' : 'Track Application'}
+            {create.isPending ? 'Submitting…' : autoSubmit ? 'Submit to DripWave' : 'Track Application'}
           </button>
         </div>
       </div>
@@ -776,8 +831,8 @@ function ProfilePage() {
   const client = useQueryClient();
 
   const [form, setForm] = useState<ContributorProfile>({
-    name: '',
-    githubUsername: '',
+    name: 'Admuad',
+    githubUsername: 'Admuad',
     skills: [],
     repositories: [],
     minPoints: 100,
@@ -789,9 +844,18 @@ function ProfilePage() {
 
   const [skillInput, setSkillInput] = useState('');
   const [repositoryInput, setRepositoryInput] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile.data) setForm(profile.data);
+    if (profile.data) {
+      setForm({
+        ...profile.data,
+        name: profile.data.name || 'Admuad',
+        githubUsername: profile.data.githubUsername || 'Admuad',
+      });
+    }
   }, [profile.data]);
 
   const addChip = (kind: 'skills' | 'repositories') => {
@@ -801,6 +865,44 @@ function ProfilePage() {
     kind === 'skills' ? setSkillInput('') : setRepositoryInput('');
   };
 
+  const handleResetDefaults = async () => {
+    setIsResetting(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/profile/reset-defaults', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setForm(data);
+        client.setQueryData(getGetContributorProfileQueryKey(), data);
+        client.invalidateQueries({ queryKey: getGetWaveIssuesQueryKey() });
+        setMsg('Profile restored to full recommended default skills!');
+      }
+    } catch (err) {
+      console.error('Failed to reset defaults:', err);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleSyncDripWave = async () => {
+    setIsSyncing(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/wave/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        client.invalidateQueries({ queryKey: getGetContributorProfileQueryKey() });
+        client.invalidateQueries({ queryKey: getGetWaveApplicationsQueryKey() });
+        client.invalidateQueries({ queryKey: getGetWaveOverviewQueryKey() });
+        setMsg(data.message || 'Synced profile and live submissions with DripWave!');
+      }
+    } catch (err) {
+      console.error('Failed to sync:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const save = () => {
     update.mutate(
       { data: form },
@@ -808,6 +910,7 @@ function ProfilePage() {
         onSuccess: (result) => {
           client.setQueryData(getGetContributorProfileQueryKey(), result);
           client.invalidateQueries({ queryKey: getGetWaveIssuesQueryKey() });
+          setMsg('Profile saved successfully.');
         },
       },
     );
@@ -820,9 +923,66 @@ function ProfilePage() {
     <div className="content">
       <PageHeading
         title="Contributor Profile"
-        description="Configure your skills, GitHub username, and wallet. Wave Assistant uses this to filter opportunities and auto-generate winning pitches."
-        meta={<><strong>Assignment Watch</strong><br />Linked to @{form.githubUsername || 'unconfigured'}</>}
+        description="Configure your skills, GitHub profile, and wallet. Wave Assistant uses this to filter opportunities and auto-generate winning pitches."
+        meta={<><strong>Assignment Watch</strong><br />Linked to @{form.githubUsername || 'Admuad'}</>}
       />
+
+      {/* Contributor Card Banner */}
+      <div className="contributor-hero-card">
+        <div className="contributor-avatar-wrap">
+          <img
+            src={`https://github.com/${form.githubUsername || 'Admuad'}.png`}
+            alt={form.name || 'Admuad'}
+            className="contributor-avatar-lg"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = 'https://avatars.githubusercontent.com/u/125326384?v=4';
+            }}
+          />
+        </div>
+        <div className="contributor-hero-info">
+          <div className="contributor-hero-name">
+            <strong>{form.name || 'Admuad'}</strong>
+            <span className="github-tag">@{form.githubUsername || 'Admuad'}</span>
+          </div>
+          <p className="contributor-hero-bio">{form.bio || 'Full-stack and Web3 engineer specializing in TypeScript, Rust, and Stellar Soroban.'}</p>
+          <div className="contributor-hero-stats">
+            <span>✨ {form.skills.length} Active Skills</span>
+            <span>·</span>
+            <span>🎯 {form.repositories.length} Target Repos</span>
+            <span>·</span>
+            <span>⚡ Min {form.minPoints} Points</span>
+          </div>
+        </div>
+        <div className="contributor-hero-actions">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={handleSyncDripWave}
+            disabled={isSyncing}
+            style={{ background: 'hsl(207 23% 20%)', color: 'hsl(39 40% 98%)', borderColor: 'hsl(207 17% 32%)' }}
+          >
+            <RefreshCw className={isSyncing ? 'animate-spin' : ''} size={12} />
+            {isSyncing ? 'Syncing…' : 'Sync DripWave'}
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={handleResetDefaults}
+            disabled={isResetting}
+            style={{ background: 'hsl(207 23% 20%)', color: 'hsl(39 40% 98%)', borderColor: 'hsl(207 17% 32%)' }}
+          >
+            <Sparkles size={12} />
+            {isResetting ? 'Resetting…' : 'Reset Recommended Skills'}
+          </button>
+        </div>
+      </div>
+
+      {msg && (
+        <div style={{ background: 'hsl(165 40% 32% / .12)', border: '1px solid hsl(165 40% 38% / .3)', color: 'hsl(var(--primary))', padding: '10px 14px', borderRadius: 8, marginBottom: 18, fontSize: 12 }}>
+          ✓ {msg}
+        </div>
+      )}
+
       <div className="form-layout">
         <section className="form-panel">
           <h2>Your Contribution Signal</h2>
@@ -834,7 +994,7 @@ function ProfilePage() {
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 data-testid="input-profile-name"
-                placeholder="e.g. Alex Rivera"
+                placeholder="e.g. Admuad"
               />
             </Field>
 
@@ -843,7 +1003,7 @@ function ProfilePage() {
                 value={form.githubUsername}
                 onChange={(event) => setForm({ ...form, githubUsername: event.target.value })}
                 data-testid="input-profile-github"
-                placeholder="e.g. alexrivera (used for assignment alerts)"
+                placeholder="e.g. Admuad (used for assignment alerts)"
               />
             </Field>
 
@@ -875,7 +1035,7 @@ function ProfilePage() {
                 setInput={setRepositoryInput}
                 add={() => addChip('repositories')}
                 remove={(value) => setForm({ ...form, repositories: form.repositories.filter((item) => item !== value) })}
-                placeholder="owner/repo (e.g. stellar/stellar-sdk)"
+                placeholder="owner/repo (e.g. stellar/soroban-sdk)"
                 testId="input-profile-repository"
               />
             </Field>
@@ -906,7 +1066,7 @@ function ProfilePage() {
               <textarea
                 value={form.bio || ''}
                 onChange={(event) => setForm({ ...form, bio: event.target.value })}
-                placeholder="Briefly describe your experience (e.g. 5+ years building backend microservices and smart contracts). AI will use this in pitch generation."
+                placeholder="Briefly describe your experience. AI will use this in proposal generation."
                 data-testid="textarea-profile-bio"
               />
             </Field>
@@ -915,7 +1075,7 @@ function ProfilePage() {
               <textarea
                 value={form.pitchTemplate || ''}
                 onChange={(event) => setForm({ ...form, pitchTemplate: event.target.value })}
-                placeholder="Optional instructions for the AI (e.g. 'Emphasize my testing rigor and 24h turnaround time')."
+                placeholder="Optional instructions for the AI (e.g. 'Emphasize fast turnaround time and Soroban expertise')."
                 data-testid="textarea-profile-pitch-template"
               />
             </Field>
