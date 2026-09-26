@@ -248,3 +248,118 @@ export async function submitApplicationToDrips(
     };
   }
 }
+
+export interface DripWaveUserPayload {
+  sub?: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  githubUsername?: string;
+  signUpDate?: string;
+}
+
+export function parseDripWaveToken(rawToken: string): {
+  jwt: string;
+  cookieHeader: string;
+  user: DripWaveUserPayload | null;
+} {
+  let jwt = rawToken.trim();
+  let cookieHeader = rawToken.trim();
+
+  if (jwt.includes("wave_access_token=")) {
+    const match = jwt.match(/wave_access_token=([^;]+)/);
+    if (match) {
+      jwt = match[1].trim();
+    }
+  }
+
+  if (jwt.startsWith("Bearer ")) {
+    jwt = jwt.replace(/^Bearer\s+/i, "").trim();
+  }
+
+  let user: DripWaveUserPayload | null = null;
+  try {
+    const parts = jwt.split(".");
+    if (parts.length >= 2) {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
+      const parsed = JSON.parse(jsonStr);
+      user = {
+        sub: parsed.sub,
+        name: parsed.name,
+        email: parsed.email,
+        picture: parsed.picture,
+        githubUsername:
+          parsed.name ||
+          (parsed.picture?.includes("/u/") ? parsed.name : undefined),
+        signUpDate: parsed.signUpDate,
+      };
+    }
+  } catch (err) {
+    console.warn("Could not parse JWT payload from token:", err);
+  }
+
+  return { jwt, cookieHeader, user };
+}
+
+export interface DripWaveUserApplication {
+  id?: string;
+  issueId: string;
+  issueTitle: string;
+  repository: string;
+  status: "pending" | "assigned" | "rejected";
+  pitch?: string;
+  appliedAt: string;
+  assignedAt?: string | null;
+}
+
+export async function fetchUserDripWaveData(rawToken: string): Promise<{
+  profile: DripWaveUserPayload | null;
+  applications: DripWaveUserApplication[];
+}> {
+  const { jwt, cookieHeader, user } = parseDripWaveToken(rawToken);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    Authorization: `Bearer ${jwt}`,
+    "User-Agent": "WaveAssistant/1.0",
+    Origin: "https://www.drips.network",
+    Referer: "https://www.drips.network/wave/stellar",
+  };
+  if (cookieHeader.includes("=")) {
+    headers["Cookie"] = cookieHeader;
+  } else {
+    headers["Cookie"] = `wave_access_token=${jwt}`;
+  }
+
+  const applications: DripWaveUserApplication[] = [];
+  const username = user?.githubUsername || user?.name || "";
+
+  // Check live issues feed for any issue where user is assigned applicant
+  const liveIssues = await fetchLiveIssues();
+  if (username) {
+    for (const issue of liveIssues) {
+      if (
+        issue.assignedApplicant?.gitHubUsername?.toLowerCase() ===
+        username.toLowerCase()
+      ) {
+        applications.push({
+          id: `drips-${issue.id}`,
+          issueId: issue.id,
+          issueTitle: issue.title,
+          repository:
+            issue.repo?.gitHubRepoFullName ||
+            issue.repo?.gitHubRepoName ||
+            "stellar",
+          status: "assigned",
+          pitch: "Assigned by DripWave maintainer",
+          appliedAt: issue.createdAt || new Date().toISOString(),
+          assignedAt:
+            issue.assignedApplicant.dueDate || new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  return { profile: user, applications };
+}
+

@@ -24,6 +24,8 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Trash2,
+  UserCheck,
   UserRound,
   Users,
   Wallet,
@@ -219,6 +221,24 @@ function Dashboard() {
     );
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      await fetch('/api/wave/sync', { method: 'POST' });
+      client.invalidateQueries({ queryKey: getGetContributorProfileQueryKey() });
+      client.invalidateQueries({ queryKey: getGetWaveApplicationsQueryKey() });
+      client.invalidateQueries({ queryKey: getGetWaveOverviewQueryKey() });
+      client.invalidateQueries({ queryKey: getGetWaveActivityQueryKey() });
+      client.invalidateQueries({ queryKey: getGetWaveIssuesQueryKey() });
+    } catch (err) {
+      console.error('Failed to sync with DripWave:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleManualRun = () => {
     runAutopilot.mutate(undefined, {
       onSuccess: () => {
@@ -253,6 +273,16 @@ function Dashboard() {
           </div>
         </div>
         <div className="autopilot-controls">
+          <button
+            className="ghost-button"
+            onClick={handleSync}
+            disabled={isSyncing}
+            style={{ background: 'hsl(207 23% 22%)', color: 'hsl(39 40% 98%)', borderColor: 'hsl(207 17% 32%)' }}
+            title="Sync your DripWave profile and live submitted applications"
+          >
+            <RefreshCw className={isSyncing ? 'animate-spin' : ''} size={13} />
+            {isSyncing ? 'Syncing DripWave…' : 'Sync DripWave'}
+          </button>
           <button
             className="ghost-button"
             onClick={handleManualRun}
@@ -392,6 +422,22 @@ function Dashboard() {
 
 function ApplicationsPanel({ applications }: { applications: WaveApplication[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const client = useQueryClient();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await fetch(`/api/wave/applications/${id}`, { method: 'DELETE' });
+      client.invalidateQueries({ queryKey: getGetWaveApplicationsQueryKey() });
+      client.invalidateQueries({ queryKey: getGetWaveOverviewQueryKey() });
+      client.invalidateQueries({ queryKey: getGetWaveActivityQueryKey() });
+    } catch (err) {
+      console.error('Failed to remove application:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <section className="panel applications-panel" data-testid="panel-applications">
@@ -432,6 +478,15 @@ function ApplicationsPanel({ applications }: { applications: WaveApplication[] }
                         {isExpanded ? 'Hide Pitch' : 'View Pitch'}
                       </button>
                     )}
+                    <button
+                      className="ghost-button"
+                      style={{ height: 26, minHeight: 26, padding: '0 6px', fontSize: 10, color: 'hsl(0 70% 60%)' }}
+                      onClick={() => handleDelete(application.id)}
+                      disabled={deletingId === application.id}
+                      title="Untrack application"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                   <div className="application-date">
                     {application.assignedAt
@@ -946,9 +1001,35 @@ function NotificationsPage() {
   const [showAiKey, setShowAiKey] = useState(false);
   const [showBotToken, setShowBotToken] = useState(false);
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (settings.data) setForm(settings.data);
   }, [settings.data]);
+
+  const handleSyncDripWave = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      const res = await fetch('/api/wave/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncMessage(data.message || 'Synced successfully with DripWave!');
+        client.invalidateQueries({ queryKey: getGetContributorProfileQueryKey() });
+        client.invalidateQueries({ queryKey: getGetWaveApplicationsQueryKey() });
+        client.invalidateQueries({ queryKey: getGetWaveOverviewQueryKey() });
+        client.invalidateQueries({ queryKey: getGetWaveActivityQueryKey() });
+      } else {
+        setSyncMessage(data.error || 'Failed to sync with DripWave.');
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setSyncMessage(errorMsg || 'Network error syncing with DripWave.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const save = () => {
     update.mutate(
@@ -970,6 +1051,8 @@ function NotificationsPage() {
         onSuccess: (result) => {
           client.setQueryData(getGetNotificationSettingsQueryKey(), result);
           client.invalidateQueries({ queryKey: getGetWaveOverviewQueryKey() });
+          client.invalidateQueries({ queryKey: getGetContributorProfileQueryKey() });
+          client.invalidateQueries({ queryKey: getGetWaveApplicationsQueryKey() });
         },
       },
     );
@@ -1050,6 +1133,23 @@ function NotificationsPage() {
               >
                 {showDripsToken ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={handleSyncDripWave}
+                disabled={!form.dripsAuthToken || isSyncing}
+                style={{ background: 'hsl(var(--secondary))', borderColor: 'hsl(var(--border))' }}
+              >
+                <RefreshCw className={isSyncing ? 'animate-spin' : ''} size={13} />
+                {isSyncing ? 'Syncing DripWave Account…' : 'Sync Profile & Applications from DripWave'}
+              </button>
+              {syncMessage && (
+                <span style={{ fontSize: 12, color: 'hsl(165 40% 40%)' }}>
+                  ✓ {syncMessage}
+                </span>
+              )}
             </div>
           </div>
 
